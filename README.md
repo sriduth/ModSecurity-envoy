@@ -6,9 +6,14 @@ Updated to use juspay's custom build of envoy with masking feature for file base
 
 Envoy base source: v1.10.0 
 
-# Building Modsecurity
+# Building against Modsecurity (v3.0.1)
 
-Download the source of modsecurity and build with the following configuration options:
+## Why v3.0.1?
+
+**In the latest version there is an issue with some of the rule parsing logic. The c API allows users
+to gracefully handle the error while the C++ api breaks.
+
+Download the source of modsecurity checkout tag v3.0.1 and build with the following configuration options:
 
 ```sh
 ./configure --without-geoip --without-lua --without-curl --without-yajl
@@ -24,6 +29,9 @@ Shared object and static lib should be created in `/usr/local/modsecurity/lib`.
 
 Wherever you choose to put the output, symlink `libmodsecurity.so` (shared object) or
 `libmodsecurity.a` (static library) into the http-filter-modsecurity folder.
+
+* Note:
+
 
 ## Building
 
