@@ -17,30 +17,26 @@ namespace Http {
 
 class HttpModSecurityFilterConfig {
 public:
-  HttpModSecurityFilterConfig(const modsecurity::Decoder& proto_config);
+  HttpModSecurityFilterConfig(const modsecurity::Decoder& proto_config,
+			      AccessLog::AccessLogFileSharedPtr log_file);
 
   ~HttpModSecurityFilterConfig();
-
-  const std::string& rules() const { return rules_; }
-
-  modsecurity::ModSecurity *modsec;
-  modsecurity::Rules * modsec_rules;
-
-private:
-  const std::string rules_;
-
+  
+  std::shared_ptr<modsecurity::ModSecurity> modsec;
+  std::shared_ptr<modsecurity::Rules> modsec_rules;
+  AccessLog::AccessLogFileSharedPtr log_file_;
 };
 
 typedef std::shared_ptr<HttpModSecurityFilterConfig> HttpModSecurityFilterConfigSharedPtr;
 
 class HttpModSecurityFilter : public StreamFilter {
 public:
-  HttpModSecurityFilter(HttpModSecurityFilterConfigSharedPtr, Server::Configuration::FactoryContext& ctx);
+  HttpModSecurityFilter(HttpModSecurityFilterConfigSharedPtr);
   ~HttpModSecurityFilter();
 
   // Http::StreamFilterBase
   void onDestroy() override;
-  void logCb(void *data, const void *ruleMessagev);
+  //  void logCb(void *data, const void *ruleMessagev);
   
   // Http::StreamDecoderFilter
   FilterHeadersStatus decodeHeaders(HeaderMap&, bool) override;
@@ -61,9 +57,7 @@ private:
   StreamDecoderFilterCallbacks* decoder_callbacks_;
   StreamEncoderFilterCallbacks* encoder_callbacks_;
   modsecurity::Transaction * modsecTransaction;
-  AccessLog::AccessLogFileSharedPtr log_file_;
 };
-
 
 } // namespace Http
 } // namespace Envoy

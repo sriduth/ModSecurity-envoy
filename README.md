@@ -1,29 +1,47 @@
-# Envoy filter example
+# Envoy mod security build
 
-This project demonstrates the linking of additional filters with the Envoy binary.
-A new filter `echo2` is introduced, identical modulo renaming to the existing
-[`echo`](https://github.com/envoyproxy/envoy/blob/master/source/extensions/filters/network/echo/echo.h)
-filter. Integration tests demonstrating the filter's end-to-end behavior are
-also provided.
+Based on: [https://github.com/octarinesec/ModSecurity-envoy](https://github.com/octarinesec/ModSecurity-envoy).
 
-For an example of additional HTTP filters, see [here](http-filter-example).
+Updated to use juspay's custom build of envoy with masking feature for file based access logs.
+
+Envoy base source: v1.10.0 
+
+# Building Modsecurity
+
+Download the source of modsecurity and build with the following configuration options:
+
+```sh
+./configure --without-geoip --without-lua --without-curl --without-yajl
+```
+
+Some of the more exotic features of modsecurity (json parsing (libyajl), ip based threat intelligence (GeoIP), download of configuration (libcurl), lua scripting (lua5.3)).
+
+If required, install the libs reconfigure modsecurity using the `configure` script and rebuild.
+
+* When shared library dependencies like any of the previously mentioned are added or removed, appropriately change the linker options in the BUILD file inside http-filter-modsecurity.
+
+Shared object and static lib should be created in `/usr/local/modsecurity/lib`.
+
+Wherever you choose to put the output, symlink `libmodsecurity.so` (shared object) or
+`libmodsecurity.a` (static library) into the http-filter-modsecurity folder.
 
 ## Building
 
 To build the Envoy static binary:
 
 1. `git submodule update --init`
-2. `bazel build //:envoy`
+2. `bazel build //http-filter-modsecurity:envoy`
 
-## Testing
+# Configuration
 
-To run the `echo2` integration test:
+Modsecurity  is configured as a http filter. Configuration takes 2 arguments - location of configuration and location of the logfile.
 
-`bazel test //:echo2_integration_test`
-
-To run the regular Envoy tests from this project:
-
-`bazel test @envoy//test/...`
+```yaml
+- name: modsecurity
+  config:
+    rules: "file:///home/ubuntu/envoy-filter-example/modsec.conf"
+    log_path: "/var/log/envoy/modsec.log"
+```
 
 ## How it works
 

@@ -2,9 +2,13 @@
 
 #include "common/common/logger.h"
 #include "envoy/registry/registry.h"
+
+#include <ctime>
+#include <chrono>
 #include <string>
 
 #include "http_filter.h"
+#include "common/common/fmt.h"
 
 #include "envoy/access_log/access_log.h"
 #include "envoy/server/filter_config.h"
@@ -18,84 +22,115 @@ using namespace std;
 namespace Envoy {
 namespace Http {
 
-  void HttpModSecurityFilter::logCb(void *data,
-				    const void *ruleMessagev) {
-    if (ruleMessagev == NULL) {
-        std::cout << "I've got a call but the message was null ;(";
-        std::cout << std::endl;
-        return;
-    }
+static AccessLog::AccessLogFileSharedPtr log_file = nullptr;
 
-    const modsecurity::RuleMessage *ruleMessage = reinterpret_cast<const modsecurity::RuleMessage *>(ruleMessagev);
-    log_file_->write(std::to_string(ruleMessage->m_ruleId));
-    log_file_->write(std::to_string(ruleMessage->m_phase));
-    
-    if (ruleMessage->m_isDisruptive) {
-        std::cout << " * Disruptive action: ";
-        std::cout << modsecurity::RuleMessage::log(ruleMessage);
-        std::cout << std::endl;
-        std::cout << " ** %d is meant to be informed by the webserver.";
-        std::cout << std::endl;
-    } else {
-        std::cout << " * Match, but no disruptive action: ";
-        std::cout << modsecurity::RuleMessage::log(ruleMessage);
-        std::cout << std::endl;
-    }
-}
+static void writeLog(const std::string& message, const std::string level = "info") {
+  static const std::string log_format = "[{}] {} {} \n";
 
+  std::time_t timestamp = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
   
-HttpModSecurityFilterConfig::HttpModSecurityFilterConfig(const modsecurity::Decoder& proto_config)
-    : rules_(proto_config.rules()) {
-    this->modsec = new modsecurity::ModSecurity();
-    this->modsec->setConnectorInformation("ModSecurity-test v0.0.1-alpha (ModSecurity test)");
+  std::string log_line = fmt::format(log_format, std::ctime(&timestamp), level, message);
+
+  log_file->write(log_line);
+}
     
-    this->modsec_rules = new modsecurity::Rules();
-    this->modsec_rules->loadFromUri(this->rules().c_str());
+static void logCb(void *data, const void *ruleMessagev) {
+  if (ruleMessagev == NULL) {
+    return;
+  }
+  
+  const modsecurity::RuleMessage *ruleMessage = reinterpret_cast<const modsecurity::RuleMessage *>(ruleMessagev);
+
+  const std::string str_rule_id = std::to_string(ruleMessage->m_ruleId);
+  const std::string str_m_phase = std::to_string(ruleMessage->m_phase);
+  
+  writeLog(fmt::format("id: {} phase: {}",
+		       str_rule_id,
+		       str_m_phase));
+		      
+  const std::string str_rule_message = modsecurity::RuleMessage::log(ruleMessage);
+
+  if (ruleMessage->m_isDisruptive) {
+    writeLog(fmt::format("ruleMessage: disruptive {}", str_rule_message), "warn");
+  } else {
+    writeLog(fmt::format("ruleMessage: {}", str_rule_message));
+  }
 }
 
-  HttpModSecurityFilter::HttpModSecurityFilter(HttpModSecurityFilterConfigSharedPtr config,
-					       Server::Configuration::FactoryContext& context)
-    : config_(config) {
-    ModSecLogCb callback = reinterpret_cast<ModSecLogCb>(&HttpModSecurityFilter::logCb);
-    config->modsec->setServerLogCb(callback, modsecurity::RuleMessageLogProperty
-                                  | modsecurity::IncludeFullHighlightLogProperty);
+HttpModSecurityFilterConfig::HttpModSecurityFilterConfig(const modsecurity::Decoder& proto_config,
+							 AccessLog::AccessLogFileSharedPtr access_log_file)
+{
 
-    modsecTransaction = new modsecurity::Transaction(this->config_->modsec, this->config_->modsec_rules, NULL);
-    this->log_file_ = context.accessLogManager().createAccessLog("/var/log/envoy/modsec.log");
+  std::cout << " create config instance " << std::endl;
+  if(access_log_file) {
+    std::cout << " access log file is created " << std::endl;
+  }
+  
+  if(!log_file) {
+    log_file_ = access_log_file; 
+    log_file = this->log_file_;
+  }
+   
+  if(!modsec) {
+    writeLog("ModSecurity initializing.");
+    modsec = std::make_shared<modsecurity::ModSecurity>();
+    modsec->setConnectorInformation("ModSecurity-test v0.0.1-alpha (ModSecurity test)");
+  }
+  
+  
+  if(!modsec_rules) {
+    std::string rules_file = proto_config.rules();
+    modsec_rules = std::make_shared<modsecurity::Rules>();
+    int rules_loaded = modsec_rules->loadFromUri(rules_file.c_str());
+    
+    if(rules_loaded < 0) {
+      std::string log = "Failed to load rules_files: " + rules_file;
+      writeLog(log, "error");
+    }
+  }
+}
+
+HttpModSecurityFilter::HttpModSecurityFilter(HttpModSecurityFilterConfigSharedPtr config)
+    : config_(config) {
+  std::cout << "Create filter" << std::endl;
+  this->config_.get()->modsec->setServerLogCb(logCb,
+					      modsecurity::RuleMessageLogProperty
+					      | modsecurity::IncludeFullHighlightLogProperty);
+
+  modsecTransaction = new modsecurity::Transaction(this->config_.get()->modsec.get(),
+						   this->config_.get()->modsec_rules.get(),
+						   NULL);
+
 }
 
 HttpModSecurityFilter::~HttpModSecurityFilter() {
-    delete this->modsecTransaction;
-    this->modsecTransaction = NULL;
+  delete this->modsecTransaction;
+  this->modsecTransaction = NULL;
+  log_file = nullptr;
 }
 
 HttpModSecurityFilterConfig::~HttpModSecurityFilterConfig() {
-    delete this->modsec;
-    this->modsec = NULL;
-//  TODO: check why this is segfaulting.
-//  delete this->modsec_rules;
-//  this->modsec_rules = NULL;
+  std::cout << " delete config " << std::endl;
 }
-
 
 void HttpModSecurityFilter::onDestroy() {
-    this->modsecTransaction->processLogging();
+  std::cout << "on destroy" << std::endl;
+  this->modsecTransaction->processLogging();
 }
-
 
 FilterHeadersStatus HttpModSecurityFilter::decodeHeaders(HeaderMap& headers, bool) {
   const char * uri = headers.get(LowerCaseString(":path"))->value().c_str();
   const char * method = headers.get(LowerCaseString(":method"))->value().c_str();
   this->modsecTransaction->processURI(uri, method, "1.1");
   headers.iterate(
-          [](const HeaderEntry& header, void* context) -> HeaderMap::Iterate {
+         [](const HeaderEntry& header, void* context) -> HeaderMap::Iterate {
             static_cast<HttpModSecurityFilter*>(context)->modsecTransaction->addRequestHeader(
-                    header.key().c_str(),
-                    header.value().c_str()
-            );
-            return HeaderMap::Iterate::Continue;
-            },
-            this);
+                   header.key().c_str(),
+                   header.value().c_str()
+          );
+          return HeaderMap::Iterate::Continue;
+          },
+          this);
   this->modsecTransaction->processRequestHeaders();
   return FilterHeadersStatus::Continue;
 }
@@ -122,18 +157,18 @@ void HttpModSecurityFilter::setDecoderFilterCallbacks(StreamDecoderFilterCallbac
 
 
 FilterHeadersStatus HttpModSecurityFilter::encodeHeaders(HeaderMap& headers, bool) {
-    int code = atoi(headers.get(LowerCaseString(":status"))->value().c_str());
+  int code = atoi(headers.get(LowerCaseString(":status"))->value().c_str());
     headers.iterate(
-            [](const HeaderEntry& header, void* context) -> HeaderMap::Iterate {
-                static_cast<HttpModSecurityFilter*>(context)->modsecTransaction->addResponseHeader(
-                        header.key().c_str(),
-                        header.value().c_str()
-                );
-                return HeaderMap::Iterate::Continue;
-            },
-            this);
-    this->modsecTransaction->processResponseHeaders(code, "1.1");
-    return FilterHeadersStatus::Continue;
+           [](const HeaderEntry& header, void* context) -> HeaderMap::Iterate {
+               static_cast<HttpModSecurityFilter*>(context)->modsecTransaction->addResponseHeader(
+                       header.key().c_str(),
+                      header.value().c_str()
+              );
+              return HeaderMap::Iterate::Continue;
+         },
+          this);
+  this->modsecTransaction->processResponseHeaders(code, "1.1");
+  return FilterHeadersStatus::Continue;
 }
 
 FilterHeadersStatus HttpModSecurityFilter::encode100ContinueHeaders(HeaderMap& headers) {
@@ -156,12 +191,10 @@ FilterDataStatus HttpModSecurityFilter::encodeData(Buffer::Instance& data, bool)
 }
 
 FilterTrailersStatus HttpModSecurityFilter::encodeTrailers(HeaderMap&) {
-    cout << "encodeTrailers" << endl;
     return FilterTrailersStatus::Continue;
 }
 
 void HttpModSecurityFilter::setEncoderFilterCallbacks(StreamEncoderFilterCallbacks& callbacks) {
-    cout << "setEncoderFilterCallbacks" << endl;
     encoder_callbacks_ = &callbacks;
 }
 

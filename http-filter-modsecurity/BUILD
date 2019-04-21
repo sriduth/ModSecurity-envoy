@@ -17,7 +17,10 @@ envoy_cc_binary(
         ":http_filter_config",
         "@envoy//source/exe:envoy_main_entry_lib",
     ],
-    linkopts = ["-lyajl", "-ldl", "-lrt", "-lpcre", "-lcurl", "-lxml2", "-lGeoIP"]
+    # pcre is required by libmodsecurity
+    # librt is for some realtime apis
+    linkopts = ["-lpcre", "-ldl", "-lrt", "-lxml2"]
+    # Other linking options disabled: "-ldl","-lyajl", "-lpcre", "-lcurl", "-lxml2", "-lGeoIP"
 )
 
 api_proto_library(

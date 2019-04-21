@@ -2,6 +2,8 @@
 
 #include "http_filter.h"
 
+#include "extensions/filters/network/mongo_proxy/proxy.h"
+
 #include "common/config/json_utility.h"
 #include "envoy/registry/registry.h"
 
@@ -19,34 +21,36 @@ public:
 
     modsecurity::Decoder proto_config;
     translateHttpModSecurityFilter(json_config, proto_config);
-
     return createFilter(proto_config, context);
   }
 
   Http::FilterFactoryCb createFilterFactoryFromProto(const Protobuf::Message& proto_config,
                                                      const std::string&,
                                                      FactoryContext& context) override {
-
-    return createFilter(
-        Envoy::MessageUtil::downcastAndValidate<const modsecurity::Decoder&>(proto_config), context);
+    auto protoC = Envoy::MessageUtil::downcastAndValidate<const modsecurity::Decoder&>(proto_config);
+    return createFilter(protoC, context);
   }
 
   /**
    *  Return the Protobuf Message that represents your config incase you have config proto
    */
   ProtobufTypes::MessagePtr createEmptyConfigProto() override {
+
     return ProtobufTypes::MessagePtr{new modsecurity::Decoder()};
   }
 
   std::string name() override { return "modsecurity"; }
 
 private:
-  Http::FilterFactoryCb createFilter(const modsecurity::Decoder& proto_config, FactoryContext& ctx) {
+  Http::FilterFactoryCb createFilter(const modsecurity::Decoder& proto_config,
+				     FactoryContext& ctx)
+  {
+    AccessLog::AccessLogFileSharedPtr log_file = ctx.accessLogManager().createAccessLog(proto_config.log_path());
     Http::HttpModSecurityFilterConfigSharedPtr config =
-      std::make_shared<Http::HttpModSecurityFilterConfig>(Http::HttpModSecurityFilterConfig(proto_config));
+      std::make_shared<Http::HttpModSecurityFilterConfig>(proto_config, log_file);
 
-    return [config, &ctx](Http::FilterChainFactoryCallbacks& callbacks) -> void {
-      auto filter = new Http::HttpModSecurityFilter(config, ctx);
+    return [config](Http::FilterChainFactoryCallbacks& callbacks) -> void {
+      auto filter = new Http::HttpModSecurityFilter(config);
       callbacks.addStreamFilter(Http::StreamFilterSharedPtr{filter});
     };
   }
@@ -62,8 +66,8 @@ private:
 /**
  * Static registration for this sample filter. @see RegisterFactory.
  */
-static Registry::RegisterFactory<HttpModSecurityFilterConfig, NamedHttpFilterConfigFactory>
-    register_;
+//REGISTER_FACTORY()
+static Registry::RegisterFactory<HttpModSecurityFilterConfig, NamedHttpFilterConfigFactory>register_;
 
 } // namespace Configuration
 } // namespace Server
