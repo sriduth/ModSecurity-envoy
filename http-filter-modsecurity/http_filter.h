@@ -21,6 +21,12 @@ public:
 			      AccessLog::AccessLogFileSharedPtr log_file);
 
   ~HttpModSecurityFilterConfig();
+
+  // Implement this method such that it can be called
+  // in the server lifecycle's shutdown callback to clear
+  // the static reference to log_file in the implementation
+  // of this header
+  void teardown();
   
   std::shared_ptr<modsecurity::ModSecurity> modsec;
   std::shared_ptr<modsecurity::Rules> modsec_rules;

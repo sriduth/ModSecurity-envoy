@@ -49,6 +49,10 @@ private:
     Http::HttpModSecurityFilterConfigSharedPtr config =
       std::make_shared<Http::HttpModSecurityFilterConfig>(proto_config, log_file);
 
+    ctx.lifecycleNotifier().registerCallback(ServerLifecycleNotifier::Stage::ShutdownExit, [config]() -> void {
+	config->teardown();
+      });
+    
     return [config](Http::FilterChainFactoryCallbacks& callbacks) -> void {
       auto filter = new Http::HttpModSecurityFilter(config);
       callbacks.addStreamFilter(Http::StreamFilterSharedPtr{filter});

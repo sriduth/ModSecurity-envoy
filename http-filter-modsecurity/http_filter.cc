@@ -22,6 +22,9 @@ using namespace std;
 namespace Envoy {
 namespace Http {
 
+
+// NOTE: set this to nullptr in the lifecycle action else the destructior
+// call when runtime shuts down will end up in a segfault / core dump
 static AccessLog::AccessLogFileSharedPtr log_file = nullptr;
 
 static void writeLog(const std::string& message, const std::string level = "info") {
@@ -59,13 +62,7 @@ static void logCb(void *data, const void *ruleMessagev) {
 
 HttpModSecurityFilterConfig::HttpModSecurityFilterConfig(const modsecurity::Decoder& proto_config,
 							 AccessLog::AccessLogFileSharedPtr access_log_file)
-{
-
-  std::cout << " create config instance " << std::endl;
-  if(access_log_file) {
-    std::cout << " access log file is created " << std::endl;
-  }
-  
+{  
   if(!log_file) {
     log_file_ = access_log_file; 
     log_file = this->log_file_;
@@ -90,6 +87,10 @@ HttpModSecurityFilterConfig::HttpModSecurityFilterConfig(const modsecurity::Deco
   }
 }
 
+void HttpModSecurityFilterConfig::teardown() {
+  log_file = nullptr;
+}
+  
 HttpModSecurityFilter::HttpModSecurityFilter(HttpModSecurityFilterConfigSharedPtr config)
     : config_(config) {
   std::cout << "Create filter" << std::endl;
@@ -106,15 +107,11 @@ HttpModSecurityFilter::HttpModSecurityFilter(HttpModSecurityFilterConfigSharedPt
 HttpModSecurityFilter::~HttpModSecurityFilter() {
   delete this->modsecTransaction;
   this->modsecTransaction = NULL;
-  log_file = nullptr;
 }
 
-HttpModSecurityFilterConfig::~HttpModSecurityFilterConfig() {
-  std::cout << " delete config " << std::endl;
-}
+HttpModSecurityFilterConfig::~HttpModSecurityFilterConfig() {}
 
 void HttpModSecurityFilter::onDestroy() {
-  std::cout << "on destroy" << std::endl;
   this->modsecTransaction->processLogging();
 }
 
