@@ -71,7 +71,7 @@ HttpModSecurityFilterConfig::HttpModSecurityFilterConfig(const modsecurity::Deco
   if(!modsec) {
     writeLog("ModSecurity initializing.");
     modsec = std::make_shared<modsecurity::ModSecurity>();
-    modsec->setConnectorInformation("ModSecurity-test v0.0.1-alpha (ModSecurity test)");
+    modsec->setConnectorInformation("ModSecurity-envoy v0.1-alpha (libml2)");
   }
   
   
@@ -93,7 +93,6 @@ void HttpModSecurityFilterConfig::teardown() {
   
 HttpModSecurityFilter::HttpModSecurityFilter(HttpModSecurityFilterConfigSharedPtr config)
     : config_(config) {
-  std::cout << "Create filter" << std::endl;
   this->config_.get()->modsec->setServerLogCb(logCb,
 					      modsecurity::RuleMessageLogProperty
 					      | modsecurity::IncludeFullHighlightLogProperty);
@@ -123,11 +122,10 @@ FilterHeadersStatus HttpModSecurityFilter::decodeHeaders(HeaderMap& headers, boo
          [](const HeaderEntry& header, void* context) -> HeaderMap::Iterate {
             static_cast<HttpModSecurityFilter*>(context)->modsecTransaction->addRequestHeader(
                    header.key().c_str(),
-                   header.value().c_str()
-          );
-          return HeaderMap::Iterate::Continue;
-          },
-          this);
+                   header.value().c_str());
+	    return HeaderMap::Iterate::Continue;
+	 },
+	 this);
   this->modsecTransaction->processRequestHeaders();
   return FilterHeadersStatus::Continue;
 }
@@ -155,15 +153,16 @@ void HttpModSecurityFilter::setDecoderFilterCallbacks(StreamDecoderFilterCallbac
 
 FilterHeadersStatus HttpModSecurityFilter::encodeHeaders(HeaderMap& headers, bool) {
   int code = atoi(headers.get(LowerCaseString(":status"))->value().c_str());
-    headers.iterate(
-           [](const HeaderEntry& header, void* context) -> HeaderMap::Iterate {
-               static_cast<HttpModSecurityFilter*>(context)->modsecTransaction->addResponseHeader(
+  
+  headers.iterate(
+		  [](const HeaderEntry& header, void* context) -> HeaderMap::Iterate {
+		    static_cast<HttpModSecurityFilter*>(context)->modsecTransaction->addResponseHeader(
                        header.key().c_str(),
-                      header.value().c_str()
-              );
-              return HeaderMap::Iterate::Continue;
-         },
-          this);
+		       header.value().c_str());
+		    return HeaderMap::Iterate::Continue;
+		  },
+		  this);
+  
   this->modsecTransaction->processResponseHeaders(code, "1.1");
   return FilterHeadersStatus::Continue;
 }
