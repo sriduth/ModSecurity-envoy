@@ -13,6 +13,7 @@
 #include "common/common/fmt.h"
 #include "envoy/access_log/access_log.h"
 #include "envoy/server/filter_config.h"
+#include "envoy/stats/scope.h"
 
 #include "envoy/api/v2/core/base.pb.h"
 #include "common/config/datasource.h"
@@ -31,6 +32,8 @@ namespace Http {
 // call when runtime shuts down will end up in a segfault / core dump
 static AccessLog::AccessLogFileSharedPtr log_file = nullptr;
 
+static Stats::Scope* scope_r = NULL;
+  
 static void writeLog(const std::string& message, const std::string level = "info") {
   static const std::string log_format = "[{}] {} {} \n";
 
@@ -58,8 +61,10 @@ static void logCb(void *data, const void *ruleMessagev) {
   const std::string str_rule_message = modsecurity::RuleMessage::log(ruleMessage);
 
   if (ruleMessage->m_isDisruptive) {
+    scope_r->counter("modsec.messages.disruptive").inc();
     writeLog(fmt::format("ruleMessage: disruptive {}", str_rule_message), "warn");
   } else {
+    scope_r->counter("modsec.messages").inc();
     writeLog(fmt::format("ruleMessage: {}", str_rule_message));
   }
 }
@@ -82,8 +87,14 @@ void EZModSecurityFilterConfig::setModsecLogPath(std::string path) {
 }
   
 HttpModSecurityFilterConfig::HttpModSecurityFilterConfig(const EZModSecurityFilterConfig& config,
-							 AccessLog::AccessLogFileSharedPtr access_log_file)
-{  
+							 AccessLog::AccessLogFileSharedPtr access_log_file,
+							 Stats::Scope& metrics_scope)
+  : scope_(metrics_scope)
+{
+  if(scope_r == NULL) {
+    scope_r = &metrics_scope;
+  }
+  
   if(!log_file) {
     log_file_ = access_log_file; 
     log_file = this->log_file_;
@@ -199,9 +210,10 @@ FilterHeadersStatus HttpModSecurityFilter::encode100ContinueHeaders(HeaderMap& h
     return FilterHeadersStatus::Continue;
 }
 
-  FilterMetadataStatus HttpModSecurityFilter::encodeMetadata(MetadataMap& map) {
-    return FilterMetadataStatus::Continue;
-  }
+FilterMetadataStatus HttpModSecurityFilter::encodeMetadata(MetadataMap& map) {
+  return FilterMetadataStatus::Continue;
+}
+  
 FilterDataStatus HttpModSecurityFilter::encodeData(Buffer::Instance& data, bool) {
     const size_t length = data.length();
     unsigned char * buffer = new unsigned char[length]();

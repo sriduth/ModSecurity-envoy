@@ -6,6 +6,7 @@
 
 #include "envoy/server/filter_config.h"
 #include "envoy/access_log/access_log.h"
+#include "envoy/stats/scope.h"
 
 #include "http-filter-modsecurity/http_filter.pb.h"
 
@@ -39,7 +40,8 @@ public:
 class HttpModSecurityFilterConfig {
 public:
   HttpModSecurityFilterConfig(const Http::EZModSecurityFilterConfig& ez_config,
-			      AccessLog::AccessLogFileSharedPtr log_file);
+			      AccessLog::AccessLogFileSharedPtr log_file,
+			      Stats::Scope& scope);
 
   ~HttpModSecurityFilterConfig();
 
@@ -52,6 +54,7 @@ public:
   std::shared_ptr<modsecurity::ModSecurity> modsec;
   std::shared_ptr<modsecurity::Rules> modsec_rules;
   AccessLog::AccessLogFileSharedPtr log_file_;
+  Stats::Scope& scope_;
 };
 
 typedef std::shared_ptr<HttpModSecurityFilterConfig> HttpModSecurityFilterConfigSharedPtr;

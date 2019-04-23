@@ -77,7 +77,7 @@ private:
       ctx.accessLogManager().createAccessLog(ez_config.modsec_log_path);
     
     Http::HttpModSecurityFilterConfigSharedPtr config =
-      std::make_shared<Http::HttpModSecurityFilterConfig>(ez_config, log_file);
+      std::make_shared<Http::HttpModSecurityFilterConfig>(ez_config, log_file, ctx.scope());
 
     // register a lifecycle callback so that when the server is terminating,
     // the static reference to the `log_file` created above can be cleaned up.
