@@ -7,7 +7,7 @@ load(
     "envoy_cc_test",
 )
 
-load("@envoy_api//bazel:api_build_system.bzl", "api_proto_library")
+load("@envoy_api//bazel:api_build_system.bzl", "api_proto_library", "api_proto_library_internal")
 
 
 envoy_cc_binary(
@@ -25,7 +25,10 @@ envoy_cc_binary(
 
 api_proto_library(
     name = "http_filter_proto",
-    srcs = ["http_filter.proto"]
+    srcs = ["http_filter.proto"],
+    deps = [
+    	 "@envoy_api//envoy/api/v2/core:base_export"
+    ]
 )
 
 cc_import(

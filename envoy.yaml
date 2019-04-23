@@ -25,7 +25,8 @@ static_resources:
           http_filters:
           - name: modsecurity
             config:
-              rules: "file:///home/ubuntu/envoy-filter-example/modsec.conf"
+              rules: 
+                filename: "/home/ubuntu/envoy-filter-example/modsec.conf"
               log_path: "/var/log/envoy/modsec.log"
           - name: envoy.router
             typed_config: {}

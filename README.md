@@ -30,9 +30,6 @@ Shared object and static lib should be created in `/usr/local/modsecurity/lib`.
 Wherever you choose to put the output, symlink `libmodsecurity.so` (shared object) or
 `libmodsecurity.a` (static library) into the http-filter-modsecurity folder.
 
-* Note:
-
-
 ## Building
 
 To build the Envoy static binary:

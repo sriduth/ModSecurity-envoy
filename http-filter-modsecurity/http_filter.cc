@@ -1,19 +1,23 @@
 #include <cstdlib>
 
 #include "common/common/logger.h"
+
 #include "envoy/registry/registry.h"
 
 #include <ctime>
 #include <chrono>
 #include <string>
+#include <iostream>
 
 #include "http_filter.h"
 #include "common/common/fmt.h"
-
 #include "envoy/access_log/access_log.h"
 #include "envoy/server/filter_config.h"
-#include <iostream>
 
+#include "envoy/api/v2/core/base.pb.h"
+#include "common/config/datasource.h"
+
+#include "absl/types/optional.h"
 #include "modsecurity/rule_message.h"
 
 
@@ -60,7 +64,24 @@ static void logCb(void *data, const void *ruleMessagev) {
   }
 }
 
-HttpModSecurityFilterConfig::HttpModSecurityFilterConfig(const modsecurity::Decoder& proto_config,
+EZModSecurityFilterConfig :: EZModSecurityFilterConfig() {}
+EZModSecurityFilterConfig :: ~EZModSecurityFilterConfig() {}
+
+void EZModSecurityFilterConfig::setPath(std::string path) {
+  this->value = path;
+  this->type = "path";
+}
+
+void EZModSecurityFilterConfig::setConfigText(std::string text) {
+  this->value = text;
+  this->type = "config_text";
+}
+
+void EZModSecurityFilterConfig::setModsecLogPath(std::string path) {
+  this->modsec_log_path = path;
+}
+  
+HttpModSecurityFilterConfig::HttpModSecurityFilterConfig(const EZModSecurityFilterConfig& config,
 							 AccessLog::AccessLogFileSharedPtr access_log_file)
 {  
   if(!log_file) {
@@ -71,17 +92,24 @@ HttpModSecurityFilterConfig::HttpModSecurityFilterConfig(const modsecurity::Deco
   if(!modsec) {
     writeLog("ModSecurity initializing.");
     modsec = std::make_shared<modsecurity::ModSecurity>();
-    modsec->setConnectorInformation("ModSecurity-envoy v0.1-alpha (libml2)");
+    modsec->setConnectorInformation("ModSecurity-envoy v0.1-alpha (libxml2)");
   }
   
   
   if(!modsec_rules) {
-    std::string rules_file = proto_config.rules();
     modsec_rules = std::make_shared<modsecurity::Rules>();
-    int rules_loaded = modsec_rules->loadFromUri(rules_file.c_str());
+
+    int rules_loaded;
+    const char* configuration_val = config.value.c_str();
     
+    if(config.type == "inline_string") {
+      rules_loaded = modsec_rules->load(configuration_val);
+    } else if(config.type == "path") {
+      rules_loaded = modsec_rules->loadFromUri(configuration_val);
+    }
+         
     if(rules_loaded < 0) {
-      std::string log = "Failed to load rules_files: " + rules_file;
+      std::string log = "Failed to load rules: " + modsec_rules->getParserError();
       writeLog(log, "error");
     }
   }

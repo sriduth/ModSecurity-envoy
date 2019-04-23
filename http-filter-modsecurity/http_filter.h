@@ -15,9 +15,30 @@
 namespace Envoy {
 namespace Http {
 
+
+// wrap the actual configuration of modsecurity inside this
+// so we can save on no converting json to proto and vice versa.
+class EZModSecurityFilterConfig {
+public:
+  std::string value;
+  std::string type; // indicates the type of configuration (path / config_text);
+  std::string modsec_log_path;
+  
+  EZModSecurityFilterConfig();
+
+  ~EZModSecurityFilterConfig();
+
+  // set either the path or the config text
+  void setPath(std::string path);
+  void setConfigText(std::string config_text);
+
+  // set the path of the modsecurity log
+  void setModsecLogPath(std::string path = "/var/log/envoy/modsec.log");
+};
+ 
 class HttpModSecurityFilterConfig {
 public:
-  HttpModSecurityFilterConfig(const modsecurity::Decoder& proto_config,
+  HttpModSecurityFilterConfig(const Http::EZModSecurityFilterConfig& ez_config,
 			      AccessLog::AccessLogFileSharedPtr log_file);
 
   ~HttpModSecurityFilterConfig();
