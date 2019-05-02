@@ -1,4 +1,4 @@
 [submodule "envoy"]
 	path = envoy
-	url = https://bitbucket.org/juspay/envoy.git
+	url = https://github.com/juspay/envoy.git
 	branch = feature/envoy-accesslog-masking
